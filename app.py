@@ -47,9 +47,9 @@ def get_bq_client():
 ASSIGNMENT_QUERY = """
 WITH agents AS (
   SELECT
-    ['Hagar Ali'] AS Seller_dedicated_agents,
-    ['Esraa tarek','Zahra Sayed','Monira galal','Nada Amr','Karim Wael'] AS Buyer_pool_swift, 
-    ['Dunya','Galal','Mohamed Aly','Mohamed hanfy','Hagar Nazieh'] AS Buyer_pool_cash,   
+    ['Hagar Nazieh'] AS Seller_dedicated_agents,
+    ['Nada','Zahra','Monira'] AS Buyer_pool_swift, 
+    ['Dunya','Galal','Mohamed Hasan','Mohamed hanfy'] AS Buyer_pool_cash,   
     ['Mohamed Saeed'] As Buyer_pool_Dealers
 ),
 
@@ -186,7 +186,7 @@ scored AS (
         AND (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 4 DAY)) THEN 2
       WHEN bid_status = 'PENDING'
         AND follow_up_status = 'NOT_CONTACTED'
-        AND (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)) THEN 3
+        AND (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY)) THEN 3
       ELSE 4
     END AS bids_timing_priority
   FROM data d
@@ -247,7 +247,6 @@ final AS (
   FROM scored s
   JOIN phone_agent_map pam
     ON pam.bidder_phone = s.bidder_phone
-  WHERE s.bids_timing_priority < 4
 )
 
 SELECT *,
@@ -327,9 +326,9 @@ def main():
         - 💵 Cash: Regular customers
         
         **Agent Pools:**
-        - Seller: Hagar Ali
-        - Swift: Esraa, Zahra, Monira, Nada, Karim
-        - Cash: Dunya, Galal, Mohamed Aly, Mohamed hanfy, Hagar Nazieh
+        - Seller: Hagar Nazieh
+        - Swift: Nada, Zahra, Monira
+        - Cash: Dunya, Galal, Mohamed Hasan, Mohamed hanfy
         - Dealers: Mohamed Saeed
         """)
     
