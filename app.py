@@ -47,12 +47,11 @@ def get_bq_client():
 ASSIGNMENT_QUERY = """
 WITH agents AS (
   SELECT
-    ['Hagar Nazieh'] AS Seller_dedicated_agents,
-    ['Nada','Zahra','Monira'] AS Buyer_pool_swift, 
-    ['Dunya','Galal','Mohamed Hasan','Mohamed hanfy'] AS Buyer_pool_cash,   
-    ['Mohamed Saeed'] As Buyer_pool_Dealers
+    ['Zahra','Karim'] AS Buyer_pool_swift,
+    ['Dunya','Galal','Mohamed Hasan','Mohamed hanfy'] AS Buyer_pool_cash,
+    ['Mohamed Saeed'] AS Buyer_pool_Dealers
 ),
-
+ 
 main AS (
   SELECT
     A.bid_id,
@@ -66,24 +65,30 @@ main AS (
     A.auctioneer_name AS Seller_name,
     A.auctioneer_phone AS seller_phone,
     A.auctioneer_type AS Seller_type,
+ 
     A.listing_price,
     A.bid_amount,
     A.bid_seller_amount AS seller_amount,
     A.bid_commission_amount AS commission,
+ 
     ROUND(SAFE_DIVIDE(A.bid_amount, A.listing_price) * 100, 1) AS Discount_ratio,
+ 
     CASE
       WHEN ROUND(SAFE_DIVIDE(A.bid_amount, A.listing_price) * 100, 1) >= 95 THEN 'P0'
       WHEN ROUND(SAFE_DIVIDE(A.bid_amount, A.listing_price) * 100, 1) >= 85 THEN 'P1'
       ELSE 'P2'
     END AS Price_priority,
+ 
     CASE
       WHEN A.accepted_at IS NOT NULL THEN 'ACCEPTED'
       ELSE A.bid_status
     END AS bid_status,
+ 
     CASE
       WHEN A.follow_up_status IS NULL THEN 'NOT_CONTACTED'
       ELSE A.follow_up_status
     END AS follow_up_status,
+ 
     DATE(A.bid_created_at) AS bid_created_date,
     A.bid_created_at,
     DATE(A.accepted_at) AS bid_accepted_date,
@@ -111,7 +116,7 @@ main AS (
       'C-62444','C-62263'
     )
 ),
-
+ 
 buyer_phone_counts AS (
   SELECT
     bidder_phone,
@@ -119,7 +124,7 @@ buyer_phone_counts AS (
   FROM `pricing-338819.gold_auction.AT_fct_bids`
   GROUP BY bidder_phone
 ),
-
+ 
 swift AS (
   SELECT
     phone,
@@ -129,30 +134,35 @@ swift AS (
   WHERE DATE(draft) >= DATE '2025-12-01'
   GROUP BY 1
 ),
-
+ 
 data AS (
   SELECT
     m.*,
     pc.bidder_phone_bid_count,
+ 
     CASE
       WHEN pc.bidder_phone_bid_count = 1 THEN 'low'
       WHEN pc.bidder_phone_bid_count BETWEEN 2 AND 3 THEN 'medium'
       WHEN pc.bidder_phone_bid_count > 3 THEN 'high'
     END AS multiple_bidders_flag,
+ 
     s.Applications,
     s.Approved_Applications,
+ 
     CASE WHEN IFNULL(s.Applications, 0) > 0 THEN 'Yes' ELSE 'No' END AS swift_application_flag,
     CASE WHEN IFNULL(s.Approved_Applications, 0) > 0 THEN 'Yes' ELSE 'No' END AS approve_swift_flag
+ 
   FROM main m
   LEFT JOIN buyer_phone_counts pc
     ON pc.bidder_phone = m.bidder_phone
   LEFT JOIN swift s
     ON s.phone = m.bidder_phone
 ),
-
+ 
 scored AS (
   SELECT
     d.*,
+ 
     CASE
       WHEN approve_swift_flag = 'Yes' AND bidder_type = 'Customer' AND Price_priority = 'P0' THEN 1
       WHEN swift_application_flag = 'Yes' AND bidder_type = 'Customer' AND Price_priority = 'P0' THEN 2
@@ -160,50 +170,50 @@ scored AS (
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'high' AND Price_priority = 'P0' THEN 4
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'medium' AND Price_priority = 'P0' THEN 5
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'low' AND Price_priority = 'P0' THEN 6
+ 
       WHEN approve_swift_flag = 'Yes' AND bidder_type = 'Customer' AND Price_priority = 'P1' THEN 7
       WHEN swift_application_flag = 'Yes' AND bidder_type = 'Customer' AND Price_priority = 'P1' THEN 8
       WHEN bidder_type = 'Dealer' AND Price_priority = 'P1' THEN 9
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'high' AND Price_priority = 'P1' THEN 10
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'medium' AND Price_priority = 'P1' THEN 11
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'low' AND Price_priority = 'P1' THEN 12
+ 
       WHEN approve_swift_flag = 'Yes' AND bidder_type = 'Customer' AND Price_priority = 'P2' THEN 13
       WHEN swift_application_flag = 'Yes' AND bidder_type = 'Customer' AND Price_priority = 'P2' THEN 14
       WHEN bidder_type = 'Dealer' AND Price_priority = 'P2' THEN 15
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'high' AND Price_priority = 'P2' THEN 16
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'medium' AND Price_priority = 'P2' THEN 17
       WHEN bidder_type = 'Customer' AND multiple_bidders_flag = 'low' AND Price_priority = 'P2' THEN 18
+ 
       ELSE 19
     END AS Bids_Assignation_priority,
+ 
     CASE
       WHEN bid_status = 'ACCEPTED'
         AND follow_up_status = 'NOT_CONTACTED'
         AND (
-          (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 4 DAY))
+          (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 4 DAY)) -- remove this when bugs are removed
           AND (bid_accepted_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY) OR bid_accepted_date IS NULL)
         ) THEN 1
+ 
       WHEN bid_status = 'ACCEPTED'
         AND follow_up_status = 'NOT_CONTACTED'
         AND (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 4 DAY)) THEN 2
+ 
       WHEN bid_status = 'PENDING'
         AND follow_up_status = 'NOT_CONTACTED'
-        AND (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY)) THEN 3
+        AND (bid_created_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)) THEN 3
+ 
       ELSE 4
     END AS bids_timing_priority
+ 
   FROM data d
 ),
-
+ 
 phone_agent_map AS (
   SELECT DISTINCT
     s.bidder_phone,
-    (
-      SELECT Seller_dedicated_agents[OFFSET(
-        MOD(
-          ABS(FARM_FINGERPRINT(CAST(s.bidder_phone AS STRING))),
-          ARRAY_LENGTH(Seller_dedicated_agents)
-        )
-      )]
-      FROM agents
-    ) AS seller_dedicated_agent,
+ 
     (
       SELECT Buyer_pool_swift[OFFSET(
         MOD(
@@ -213,6 +223,7 @@ phone_agent_map AS (
       )]
       FROM agents
     ) AS Buyer_pool_swift,
+ 
     (
       SELECT Buyer_pool_Dealers[OFFSET(
         MOD(
@@ -222,6 +233,7 @@ phone_agent_map AS (
       )]
       FROM agents
     ) AS Buyer_pool_Dealers,
+ 
     (
       SELECT Buyer_pool_cash[OFFSET(
         MOD(
@@ -231,25 +243,29 @@ phone_agent_map AS (
       )]
       FROM agents
     ) AS Buyer_pool_cash
+ 
   FROM scored s
 ),
-
+ 
 final AS (
   SELECT
     s.*,
+ 
     CASE
-      WHEN s.bids_timing_priority IN (1,2) THEN pam.seller_dedicated_agent
       WHEN s.Bids_Assignation_priority IN (1,2,7,8,13,14) THEN pam.Buyer_pool_swift
       WHEN s.Bids_Assignation_priority IN (3,9,15) THEN pam.Buyer_pool_Dealers
       WHEN s.Bids_Assignation_priority IN (4,5,6,10,11,12,16,17,18) THEN pam.Buyer_pool_cash
       ELSE pam.Buyer_pool_cash
     END AS assigned_agent
+ 
   FROM scored s
   JOIN phone_agent_map pam
     ON pam.bidder_phone = s.bidder_phone
+where bids_timing_priority <4
 )
-
-SELECT *,
+ 
+SELECT
+  *,
   CASE
     WHEN Bids_Assignation_priority IN (1,2,7,8,13,14) THEN 'Swift'
     WHEN Bids_Assignation_priority IN (3,9,15) THEN 'Dealers'
@@ -258,10 +274,10 @@ SELECT *,
   END AS Bidder_segments
 FROM final
 ORDER BY
-  bids_timing_priority ASC,        
-  Bids_Assignation_priority ASC,   
+  bids_timing_priority ASC,
+  Bids_Assignation_priority ASC,
   Discount_ratio DESC,
-  bid_created_at DESC
+  bid_created_at DESC;
 """
 
 # Log table details
